@@ -4,10 +4,13 @@ const authRoutes = require('./routes/auth');
 const taskRoutes = require('./routes/task');
 const migrate = require('./migrations/migrate');
 const { authenticate } = require('./middleware/authMiddleware');
+const cors = require("cors");
 
 const app = express();
 const PORT = 3000;
 
+
+app.use(cors());
 app.use(bodyParser.json());
 
 // Authentication routes
