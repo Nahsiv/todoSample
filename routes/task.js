@@ -58,9 +58,10 @@ router.get('/', async (req, res) => {
   });  
 
   // create a route that will give us the summary 
+  // change it to percentage 
+  // pending tasks, 
 router.get('/task-stats', async (req, res) => {
   try {
-    console.log("I am here ")
     // Query to get statistics
     const query = `
       WITH task_summary AS (
@@ -88,13 +89,93 @@ router.get('/task-stats', async (req, res) => {
     // Send response
     res.json({
       totalTasks: stats.total_tasks,
-      tasksCompleted: stats.tasks_completed,
-      tasksPending: stats.tasks_pending,
-      averageTimePerCompletedTask: `${Math.round(stats.avg_time_seconds)} seconds`
+      tasksCompletedPercentage: `${((stats.tasks_completed / stats.total_tasks) * 100).toFixed(2)} %`,
+      tasksPendingPercentage: `${((stats.tasks_pending / stats.total_tasks) * 100).toFixed(2)} %`,
+      averageTimePerCompletedTask: `${(stats.avg_time_seconds / 60).toFixed(2)} hrs`
     });
+    
   } catch (error) {
     console.error('Error fetching task stats:', error);
     res.status(500).json({ error: 'Failed to fetch task statistics' });
+  }
+});
+
+router.get('/pending-tasks', async (req, res) => {
+  try {
+    const query = `
+      WITH pending_aggregate AS (
+        SELECT
+          COUNT(*) AS pending_tasks_count,
+          SUM(EXTRACT(EPOCH FROM (NOW() - start_time))) AS total_time_lapsed_seconds,
+          SUM(EXTRACT(EPOCH FROM (end_time - start_time))) AS total_estimated_time_seconds
+        FROM tasks
+        WHERE status = 'pending'
+      )
+      SELECT
+        pending_tasks_count,
+        COALESCE(total_time_lapsed_seconds, 0) / 3600 AS total_time_lapsed_hours,
+        COALESCE(total_estimated_time_seconds, 0) / 3600 AS total_estimated_time_hours
+      FROM pending_aggregate;
+    `;
+
+    // Execute the query
+    const result = await pool.query(query);
+
+    // Extract data
+    const stats = result.rows[0];
+
+    // Send response
+    res.json({
+      pendingTasksCount: stats.pending_tasks_count,
+      totalTimeLapsedHours: stats.total_time_lapsed_hours,
+      totalEstimatedTimeHours: stats.total_estimated_time_hours
+    });
+  } catch (error) {
+    console.error('Error fetching pending tasks aggregate data:', error);
+    res.status(500).json({ error: 'Failed to fetch pending tasks data' });
+  }
+});
+
+
+router.get('/tasks-by-priority', async (req, res) => {
+  try {
+    const query = `
+      WITH priority_summary AS (
+        SELECT
+          priority,
+          COUNT(*) AS total_tasks,
+          COUNT(*) FILTER (WHERE status = 'pending') AS pending_tasks,
+          SUM(EXTRACT(EPOCH FROM (NOW() - start_time))) FILTER (WHERE status = 'pending') AS total_time_lapsed_seconds,
+          SUM(EXTRACT(EPOCH FROM (end_time - start_time))) FILTER (WHERE status = 'pending') AS total_estimated_time_seconds
+        FROM tasks
+        GROUP BY priority
+      )
+      SELECT
+        priority,
+        total_tasks,
+        pending_tasks,
+        COALESCE(total_time_lapsed_seconds, 0) / 3600 AS total_time_lapsed_hours,
+        COALESCE(total_estimated_time_seconds, 0) / 3600 AS total_estimated_time_hours
+      FROM priority_summary
+      ORDER BY priority;
+    `;
+
+    const result = await pool.query(query);
+
+    const priorities = result.rows.map(row => ({
+      priority: row.priority,
+      totalTasks: row.total_tasks,
+      pendingTasks: row.pending_tasks,
+      totalTimeLapsedHours: row.total_time_lapsed_hours,
+      totalEstimatedTimeHours: row.total_estimated_time_hours
+    }));
+
+    res.json({
+      tasksByPriority: priorities
+    });
+  } catch (error) {
+    console.error('Error fetching tasks by priority:', error);
+    res.status(500).json({ error: 'Failed to fetch tasks grouped by priority' });
   }
 });
 
