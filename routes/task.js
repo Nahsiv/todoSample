@@ -57,6 +57,49 @@ router.get('/', async (req, res) => {
     }
   });  
 
+  // create a route that will give us the summary 
+router.get('/task-stats', async (req, res) => {
+  try {
+    console.log("I am here ")
+    // Query to get statistics
+    const query = `
+      WITH task_summary AS (
+        SELECT
+          COUNT(*) AS total_tasks,
+          COUNT(*) FILTER (WHERE status = 'finished') AS tasks_completed,
+          COUNT(*) FILTER (WHERE status = 'pending') AS tasks_pending,
+          AVG(EXTRACT(EPOCH FROM (end_time - start_time))) AS avg_time_seconds
+        FROM tasks
+      )
+      SELECT
+        total_tasks,
+        tasks_completed,
+        tasks_pending,
+        COALESCE(avg_time_seconds, 0) AS avg_time_seconds
+      FROM task_summary;
+    `;
+
+    // Execute the query
+    const result = await pool.query(query);
+
+    // Extract data
+    const stats = result.rows[0];
+
+    // Send response
+    res.json({
+      totalTasks: stats.total_tasks,
+      tasksCompleted: stats.tasks_completed,
+      tasksPending: stats.tasks_pending,
+      averageTimePerCompletedTask: `${Math.round(stats.avg_time_seconds)} seconds`
+    });
+  } catch (error) {
+    console.error('Error fetching task stats:', error);
+    res.status(500).json({ error: 'Failed to fetch task statistics' });
+  }
+});
+
+
+
 
 router.post('/', async (req, res) => {
 
