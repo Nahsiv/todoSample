@@ -28,7 +28,8 @@ const patchTaskValidator = Joi.object({
   priority: Joi.number().integer().min(1).max(5).optional(),
   status: Joi.string().valid('pending', 'finished').optional(),
   start_time: Joi.date().optional(),
-  end_time: Joi.date().optional()
+  end_time: Joi.date().optional(),
+  user_id: Joi.string().guid({ version: 'uuidv4' }).required()
 });
 
 /**
